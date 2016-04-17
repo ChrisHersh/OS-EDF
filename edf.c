@@ -45,7 +45,7 @@ int number_of_running_threads()
     int i = 0;
     for(; i < 10; i++)
     {
-        if(!done_threads[i])
+        if(!finished_current_period[i])
             count++;
     }
     return count;
@@ -59,9 +59,9 @@ int get_next_thread()
     int i;
     for(i = 0; i < num_threads; i++)
     {
-        if(next_period < next_deadline && finished_current_period[i] == 0)
+        if(next_period[i] < next_deadline && finished_current_period[i] == 0)
         {
-            next_deadline = next_period;
+            next_deadline = next_period[i];
             next_deadline_thread = i;
         }
     }
@@ -78,13 +78,13 @@ void check_threads_for_new_period()
     int i;
     for(i = 0; i < num_threads; i++)
     {
-        if(next_period == time_count && finished_current_period[i] == 1)
+        if(next_period[i] == time_count && finished_current_period[i] == 1)
         {
-            next_deadline = next_period;
+            next_deadline = next_period[i];
             next_deadline_thread = i;
         }
         //Shouldn't hit, means we missed a deadline
-        else if(next_period == time_count && finished_current_period[i] == 0)
+        else if(next_period[i] == time_count && finished_current_period[i] == 0)
         {
             printf("WE MISSED A DEADLINE");
         }
@@ -237,7 +237,6 @@ int main(int argc, char** argv)
     }
 
     num_threads = atoi(argv[1]);
-    time_quantum = atoi(argv[2]);
     
     //Poor lonely index
     int i;
