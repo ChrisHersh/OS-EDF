@@ -27,6 +27,7 @@ sem_t timer;
 sem_t ready[MAX_THREADS];
 
 int burst_times[MAX_THREADS];
+int current_burst_times[MAX_THREADS];
 int period_times[MAX_THREADS];
 
 int next_period[MAX_THREADS];
@@ -51,14 +52,27 @@ int number_of_running_threads()
     return count;
 }
 
+void print_deadlines()
+{
+    int i;
+    for(i = 0; i < num_threads; i++)
+    {
+        printf("Thread %d deadline: %d, finished status is: %d\n", i, next_period[i], finished_current_period[i]);
+    }
+}
+
 //Get the next earliest deadline
 int get_next_thread()
 {
     int next_deadline = INT_MAX;
     int next_deadline_thread = INT_MAX;  
     int i;
+    
+    //print_deadlines();
+    
     for(i = 0; i < num_threads; i++)
     {
+        //printf("CONSIDERING THREAD %d\n", i);
         if(next_period[i] < next_deadline && finished_current_period[i] == 0)
         {
             next_deadline = next_period[i];
@@ -66,6 +80,7 @@ int get_next_thread()
         }
     }
     
+    //printf("RETURNING THREAD DEADLINE\n");
     return next_deadline_thread;
 }
 
@@ -73,15 +88,20 @@ int get_next_thread()
 //If it has then set it so it can run again
 void check_threads_for_new_period()
 {
-    int next_deadline = INT_MAX;
-    int next_deadline_thread = INT_MAX;  
+    //int next_deadline = INT_MAX;
+    //int next_deadline_thread = INT_MAX;  
     int i;
     for(i = 0; i < num_threads; i++)
     {
-        if(next_period[i] == time_count && finished_current_period[i] == 1)
+        //printf("Thread %d has period of %d\n", i, period_times[i]);
+        //printf("FINDING NEW DEADLINE FOR THREAD %d with deadline %d at time %d\n", i, next_period[i], time_count);
+        if(next_period[i] <= time_count && finished_current_period[i] == 1)
         {
-            next_deadline = next_period[i];
-            next_deadline_thread = i;
+            //next_deadline = next_period[i];
+            //next_deadline_thread = i;
+            
+            next_period[i] += period_times[i];
+            finished_current_period[i] = 0;
         }
         //Shouldn't hit, means we missed a deadline
         else if(next_period[i] == time_count && finished_current_period[i] == 0)
@@ -96,24 +116,17 @@ void cpu_idle()
     if(cpu_idling == 0)
     {
         cpu_idling = 1;
-        printf("CPU is now idling\n");
+        printf("\tCPU is now idling\n");
     }
     
 }
 
 void exit_cpu_idle()
 {
-    if(cpu_idling == 1)
-    {
-        if(get_next_thread() != -1)
-        {
-            current_thread == get_next_thread();
-        }
-        else
-        {
-            cpu_idle();
-        }
-    }
+    //printf("EXITING CPU IDLE\n");
+
+    current_thread = get_next_thread();
+    cpu_idling = 0;
 }
 
 //Main timer function
@@ -126,7 +139,7 @@ void *timer_thread(void *param)
     
     while(threads_running)
     {
-        int i;
+        //int i;
         
        
         //Used to help prevent race conditions, mainly with printing
@@ -134,24 +147,36 @@ void *timer_thread(void *param)
 
         printf("%d\n", time_count);
         time_count ++;
+        
+        if(time_count == time_limit)
+        {
+            threads_running = 0;
+            sem_post(&timer);
+            printf("Killed\n");
+            break;
+        }
 
-        //Update the threads available to be run
-        check_threads_for_new_period();
+        
 
         //update remaining burst times
-        if(current_thread != -1)
+        if(current_thread != -1 && current_thread != INT_MAX)
         {
-            burst_times[current_thread]--;
+            current_burst_times[current_thread]--;
             //Check if the worker thread should be finished
-            if(burst_times[current_thread] <= 0)
+            if(current_burst_times[current_thread] <= 0)
             {
-            next_period[current_thread] += period_times[current_thread];
-            finished_current_period[current_thread] = 1; 
-            
-            sem_post(&timer);
-                
-                printf("\tThread %d finishes it's job. It will be terminated\n", current_thread);
+                //next_period[current_thread] += period_times[current_thread];
+                finished_current_period[current_thread] = 1; 
+                current_burst_times[current_thread] = burst_times[current_thread];
+                //printf("posting to timer\n");
+                sem_post(&timer);
+                    
+                //printf("\tThread %d finishes it's job. It will be terminated\n", current_thread);
             }
+        }
+        else
+        {
+            sem_post(&timer);
         }
         if(time_count == time_limit)
         {
@@ -170,37 +195,45 @@ void *sched(void *param)
     while(threads_running)
     {
         sem_wait(&timer);
-        current_thread += 1;
-        int next_thread = -1;
-        int i = current_thread;
-        int x = 0;
-
         
+        if(time_count == time_limit)
+        {
+            //threads_running = 0;
+            //sem_post(&timer);
+            break;
+        }
+        
+        //current_thread += 1;
+        int next_thread = -1;
+        //int i = current_thread;
+        //int x = 0;
+
+        //Update the threads available to be run
+        check_threads_for_new_period();
 
         //Find next thread that needs to be run
-/*        for(; i < (num_threads + current_thread) && x < num_threads; i++, x++)
-        {
-            if(i >= num_threads)
-                i = i % num_threads;
-            if(burst_times[i] > 0)
-            {
-                next_thread = i;
-                break;
-            }
-        } */
         
         next_thread = get_next_thread();
-
-/*        //Make sure threads still need to be run
-        if(next_thread == -1 || number_of_running_threads() == 0)
+        
+        if(cpu_idling == 1 && next_thread != INT_MAX)
         {
-            printf("\tAll threads have done their work. The scheduler thread exits.\n");
-            threads_running = 0;
-            break;
-        } */
+            exit_cpu_idle();
+        }
+        
+        if(next_thread == INT_MAX)
+        {
+            cpu_idle();
+        }
+        else
+        {
+            sem_post(&ready[next_thread]);
+        }
+        //printf("SCH THREAD CONTINUING, nEXT THREAD IS %d\n", next_thread);
+
 
         //Allow thread to run
-        sem_post(&ready[next_thread]);
+        //printf("Posting to ready semaphore %d", next_thread);
+        
     }    
     int i;
     for(i = 0; i < 10; i++)
@@ -230,9 +263,9 @@ int main(int argc, char** argv)
 {
     
     //Take input with some error checking
-    if(argc < 3)
+    if(argc < 2)
     {
-        printf("Correct usage is <command> <number of threads> <time quantum>\n");
+        printf("Correct usage is <command> <number of threads>\n");
         exit(1);
     }
 
@@ -259,7 +292,33 @@ int main(int argc, char** argv)
     {
         printf("Burst time for Thread %d: ", i);
         scanf("%d", &burst_times[i]);
+        current_burst_times[i] = burst_times[i];
     }
+    
+    //Take input for the period times
+    for(i = 0; i < num_threads; i++)
+    {
+        printf("Period for Thread %d: ", i);
+        scanf("%d", &period_times[i]);
+        next_period[i] = period_times[i];
+    }
+    
+    printf("How long do you want to execute this program (sec): ");
+    scanf("%d", &time_limit);
+
+
+    float sum = 0;
+    for(i = 0; i < num_threads; i++)
+    {
+        sum += ((float)burst_times[i])/period_times[i];
+    }
+    
+    if(sum > 1)
+    {
+        printf("These threads cannot be scheduled\n");
+        return -1;
+    }
+
 
     //Init each ready semaphore
     for(i = 0; i < num_threads; i++)
@@ -301,5 +360,5 @@ int main(int argc, char** argv)
 
     pthread_join(timer_tid, NULL);
     pthread_join(sch_tid, NULL);
-
+    return 0;
 }

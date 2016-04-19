@@ -7,4 +7,4 @@
 #
 
 all:
-	gcc edf.c -lpthread -o edf
+	gcc edf.c -lpthread -g3 -Wall -o edf
