@@ -1,5 +1,5 @@
 #
-# Lab 5: Thread Scheduling
+# Project 2: CPU Scheduling
 # Programmer: Chris Hersh
 # Course: CMPE 320
 # Section: 2 (11-12:50pm)

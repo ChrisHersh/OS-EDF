@@ -6,7 +6,7 @@
 #include <limits.h>
 
 /*
-* Lab 5: Thread Scheduling
+* Project 2: CPU Scheduling
 * Programmer: Chris Hersh
 * Course: CMPE 320
 * Section: 2 (11-12:50pm)
@@ -80,7 +80,6 @@ int get_next_thread()
         }
     }
     
-    //printf("RETURNING THREAD DEADLINE\n");
     return next_deadline_thread;
 }
 
@@ -88,18 +87,11 @@ int get_next_thread()
 //If it has then set it so it can run again
 void check_threads_for_new_period()
 {
-    //int next_deadline = INT_MAX;
-    //int next_deadline_thread = INT_MAX;  
     int i;
     for(i = 0; i < num_threads; i++)
     {
-        //printf("Thread %d has period of %d\n", i, period_times[i]);
-        //printf("FINDING NEW DEADLINE FOR THREAD %d with deadline %d at time %d\n", i, next_period[i], time_count);
         if(next_period[i] <= time_count && finished_current_period[i] == 1)
         {
-            //next_deadline = next_period[i];
-            //next_deadline_thread = i;
-            
             next_period[i] += period_times[i];
             finished_current_period[i] = 0;
         }
@@ -111,6 +103,7 @@ void check_threads_for_new_period()
     }
 }
 
+//functionality for the cpu idle
 void cpu_idle()
 {
     if(cpu_idling == 0)
@@ -121,10 +114,9 @@ void cpu_idle()
     
 }
 
+//Functionality for exiting the cpu idle status
 void exit_cpu_idle()
 {
-    //printf("EXITING CPU IDLE\n");
-
     current_thread = get_next_thread();
     cpu_idling = 0;
 }
@@ -139,9 +131,6 @@ void *timer_thread(void *param)
     
     while(threads_running)
     {
-        //int i;
-        
-       
         //Used to help prevent race conditions, mainly with printing
         nanosleep((const struct timespec[]) {{0, 5000000L}}, NULL);
 
@@ -156,8 +145,6 @@ void *timer_thread(void *param)
             break;
         }
 
-        
-
         //update remaining burst times
         if(current_thread != -1 && current_thread != INT_MAX)
         {
@@ -165,13 +152,9 @@ void *timer_thread(void *param)
             //Check if the worker thread should be finished
             if(current_burst_times[current_thread] <= 0)
             {
-                //next_period[current_thread] += period_times[current_thread];
                 finished_current_period[current_thread] = 1; 
                 current_burst_times[current_thread] = burst_times[current_thread];
-                //printf("posting to timer\n");
                 sem_post(&timer);
-                    
-                //printf("\tThread %d finishes it's job. It will be terminated\n", current_thread);
             }
         }
         else
@@ -198,21 +181,15 @@ void *sched(void *param)
         
         if(time_count == time_limit)
         {
-            //threads_running = 0;
-            //sem_post(&timer);
             break;
         }
         
-        //current_thread += 1;
         int next_thread = -1;
-        //int i = current_thread;
-        //int x = 0;
 
         //Update the threads available to be run
         check_threads_for_new_period();
 
         //Find next thread that needs to be run
-        
         next_thread = get_next_thread();
         
         if(cpu_idling == 1 && next_thread != INT_MAX)
@@ -228,12 +205,6 @@ void *sched(void *param)
         {
             sem_post(&ready[next_thread]);
         }
-        //printf("SCH THREAD CONTINUING, nEXT THREAD IS %d\n", next_thread);
-
-
-        //Allow thread to run
-        //printf("Posting to ready semaphore %d", next_thread);
-        
     }    
     int i;
     for(i = 0; i < 10; i++)
@@ -252,7 +223,9 @@ void *work(void *param)
         if(finished_current_period[number])
             break;
         current_thread = number;
-        printf("\tThread %d is now being executed\n", number);
+        //Fixes bug where sometimes one or more of these lines will be printed out after the time limit has been reached
+        if(threads_running)
+            printf("\tThread %d is now being executed\n", number);
     }    
 
     return NULL;
@@ -261,7 +234,6 @@ void *work(void *param)
 //Main function
 int main(int argc, char** argv)
 {
-    
     //Take input with some error checking
     if(argc < 2)
     {
